@@ -2,6 +2,9 @@ const listElement = document.querySelector("#incident-list");
 const listStatusElement = document.querySelector("#list-status");
 const detailsElement = document.querySelector("#incident-details");
 const filterForm = document.querySelector("#filter-form");
+const summaryListElement = document.querySelector("#severity-summary-list");
+const summaryStatusElement = document.querySelector("#summary-status");
+const summaryRefreshButton = document.querySelector("#summary-refresh");
 
 async function apiFetch(path, options = {}) {
   const response = await fetch(path, {
@@ -78,6 +81,25 @@ function renderIncidentDetails(incident) {
   detailsElement.replaceChildren(heading, metadata, description, commentsHeading, comments);
 }
 
+function renderSeveritySummary(groups) {
+  summaryListElement.replaceChildren();
+
+  if (groups.length === 0) {
+    summaryStatusElement.textContent = "Груп немає для поточного фільтра.";
+    return;
+  }
+
+  summaryStatusElement.textContent = `Груп: ${groups.length}`;
+  for (const group of groups) {
+    const item = document.createElement("li");
+    item.append(
+      createTextElement("strong", group.severity),
+      createTextElement("span", ` — ${group.count}`, "metadata"),
+    );
+    summaryListElement.append(item);
+  }
+}
+
 async function loadIncidents() {
   listStatusElement.textContent = "Завантаження…";
   listElement.replaceChildren();
@@ -103,9 +125,28 @@ async function loadIncidentDetails(id) {
   }
 }
 
+async function loadSeveritySummary() {
+  summaryStatusElement.textContent = "Завантаження…";
+  summaryListElement.replaceChildren();
+  summaryRefreshButton.disabled = true;
+
+  const status = new FormData(filterForm).get("status");
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+
+  try {
+    renderSeveritySummary(await apiFetch(`/api/incidents/severity-summary${query}`));
+  } catch (error) {
+    summaryStatusElement.textContent = `Помилка: ${error.message}`;
+  } finally {
+    summaryRefreshButton.disabled = false;
+  }
+}
+
 filterForm.addEventListener("submit", (event) => {
   event.preventDefault();
   loadIncidents();
 });
 
 loadIncidents();
+
+summaryRefreshButton.addEventListener("click", loadSeveritySummary);

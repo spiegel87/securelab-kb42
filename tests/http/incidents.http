@@ -25,15 +25,23 @@ Accept: application/json
 GET {{host}}/api/incidents?status=Unknown
 Accept: application/json
 
-### Lab 1 extension point: expected 501 before student implementation
-GET {{host}}/api/incidents/severity-summary
-Accept: application/json
-### Severity summary
+### Severity summary — success, no filter: expected 200, 3 groups (High/Medium/Low), no Critical
 # Contract (LR1, Stage 3):
 # - GET /api/incidents/severity-summary?status={optional}
-# - Zero-group policy: include only existing groups (exclude Critical if count is 0)
-# - Order: by descending severity (Critical → High → Medium → Low)
+# - Zero-group policy: include only existing groups (exclude Critical if count = 0)
+# - Order: by descending severity (Critical -> High -> Medium -> Low)
 # - status: IncidentStatus allowlist (New/Triaged/InProgress/Resolved/Closed), 400 if invalid
-# Baseline expectation: 501
-# Expectation after implementation: 200
-GET {{baseUrl}}/api/incidents/severity-summary
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
+### Severity summary — filtered by valid status: expected 200, subset of groups
+GET {{host}}/api/incidents/severity-summary?status=New
+Accept: application/json
+
+### Severity summary — filtered by status with no matching incidents: expected 200, empty array
+GET {{host}}/api/incidents/severity-summary?status=Closed
+Accept: application/json
+
+### Severity summary — invalid status: expected 400 Validation Problem Details
+GET {{host}}/api/incidents/severity-summary?status=Unknown
+Accept: application/json
