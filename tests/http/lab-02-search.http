@@ -1,0 +1,91 @@
+@baseUrl = http://localhost:5080
+### Звичайний пошук
+GET {{baseUrl}}/api/incidents/search?q=навчальн
+### Легітимний апостроф
+GET {{baseUrl}}/api/incidents/search?q=O%27Brien
+### Коректне створення інциденту (T-01, очікується 201 Created)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 regression incident",
+  "description": "Опис достатньої довжини для базового сценарію створення.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-10-03T12:00:00Z"
+}
+
+### Невідомий severity (CP-01: TryParse прийняв би "7", IsDefined відхиляє; очікується 400 з ключем severity)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 numeric severity check",
+  "description": "Опис для перевірки некоректного числового severity.",
+  "severity": "7",
+  "occurredAtUtc": "2026-10-03T12:00:00Z"
+}
+
+### Відсутній title (очікується 400 з ключем title)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "",
+  "description": "Опис без заголовка для перевірки required title.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-10-03T12:00:00Z"
+}
+
+### Відсутній occurredAtUtc (очікується 400 з ключем occurredAtUtc)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 missing occurredAtUtc",
+  "description": "Опис без дати виникнення інциденту.",
+  "severity": "Low"
+}
+
+### occurredAtUtc більш ніж на 5 хвилин у майбутньому (очікується 400 з ключем occurredAtUtc)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 future occurredAtUtc",
+  "description": "Опис з датою занадто далеко в майбутньому.",
+  "severity": "Low",
+  "occurredAtUtc": "2099-01-01T00:00:00Z"
+}
+
+### Cross-field: High severity, description 39 символів після Trim (очікується 400 з ключем description)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 high severity short description",
+  "description": "123456789012345678901234567890123456789",
+  "severity": "High",
+  "occurredAtUtc": "2026-10-03T12:00:00Z"
+}
+
+### Cross-field: High severity, description рівно 40 символів після Trim (очікується 201)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 high severity exact description",
+  "description": "1234567890123456789012345678901234567890",
+  "severity": "High",
+  "occurredAtUtc": "2026-10-03T12:00:00Z"
+}
+
+### Предметний конфлікт: повторний title у тому самому регістрі (T-03, очікується 409)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Lab02 regression incident",
+  "description": "Опис достатньої довжини для базового сценарію створення.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-10-03T12:00:00Z"
+}

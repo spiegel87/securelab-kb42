@@ -1,0 +1,6 @@
+{
+  "release": "lab-02-start-v1",
+  "inherits": "v0.1.0",
+  "base_commit": "fd5a0bc9a7a607294848b515c4ceceb1c503f46b",
+  "entry_parent": "fd5a0bc9a7a607294848b515c4ceceb1c503f46b"
+}
