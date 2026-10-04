@@ -6,26 +6,70 @@ using SecureLab.Api.Application.Incidents;
 namespace SecureLab.Api.Scaffolding;
 
 // Навчальний старт ЛР 02. Запускати лише з локальними штучними даними.
+
 public static class Lab02Endpoints
 {
+    private const char LikeEscapeChar = '\\';
+    private static readonly string[] AllowedSortBy = ["createdAtUtc", "severity", "status"];
+
+    private static string EscapeLikePattern(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (ch == LikeEscapeChar || ch == '%' || ch == '_')
+            {
+                builder.Append(LikeEscapeChar);
+            }
+            builder.Append(ch);
+        }
+        return builder.ToString();
+    }
+
     public static void MapLab02Endpoints(this WebApplication app)
     {
         app.MapGet("/api/incidents/search", async (string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
         {
-            var order = sortBy switch
+            var effectiveSortBy = string.IsNullOrEmpty(sortBy) ? "createdAtUtc" : sortBy;
+            if (!AllowedSortBy.Contains(effectiveSortBy))
             {
-                null or "" or "createdAtUtc" => "created_at_utc DESC",
-                "severity" => "severity", "status" => "status", _ => sortBy
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["sortBy"] = ["Допустимі значення: createdAtUtc, severity, status."]
+                });
+            }
+
+            var escapeString = LikeEscapeChar.ToString();
+            var pattern = $"%{EscapeLikePattern(q ?? string.Empty)}%";
+
+            var query = db.Incidents.AsNoTracking().Where(incident =>
+                EF.Functions.ILike(incident.Title, pattern, escapeString) ||
+                EF.Functions.ILike(incident.Description, pattern, escapeString));
+
+            query = effectiveSortBy switch
+            {
+                "severity" => query.OrderBy(i =>
+                    i.Severity == IncidentSeverity.Critical ? 0
+                    : i.Severity == IncidentSeverity.High ? 1
+                    : i.Severity == IncidentSeverity.Medium ? 2
+                    : 3),
+                "status" => query.OrderBy(i =>
+                    i.Status == IncidentStatus.New ? 0
+                    : i.Status == IncidentStatus.Triaged ? 1
+                    : i.Status == IncidentStatus.InProgress ? 2
+                    : i.Status == IncidentStatus.Resolved ? 3
+                    : 4),
+                _ => query.OrderByDescending(i => i.CreatedAtUtc)
             };
-            var sql = "SELECT * FROM incidents WHERE title ILIKE '%" + (q ?? "")
-                + "%' OR description ILIKE '%" + (q ?? "") + "%' ORDER BY " + order + " LIMIT 50";
-            var rows = await db.Incidents.FromSqlRaw(sql).AsNoTracking().ToListAsync(ct);
+
+            var rows = await query.Take(50).ToListAsync(ct);
             return Results.Ok(rows.Select(row => new
             {
                 row.Id, row.Title, row.Description,
                 Severity = row.Severity.ToString(), Status = row.Status.ToString(), row.CreatedAtUtc
             }));
         });
+
         app.MapPost("/api/incidents", async (CreateIncidentRequest request, IncidentCommands commands, CancellationToken ct) =>
         {
             var result = await commands.CreateAsync(request, ct);

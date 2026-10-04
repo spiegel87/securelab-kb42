@@ -1,0 +1,3 @@
+Файл / метод	Конструкція	Категорія	Висновок
+Data/DatabaseBootstrap.cs:29, метод InitializeAsync	dbContext.Database.ExecuteSqlRawAsync("TRUNCATE TABLE ...")	Trusted static SQL	Рядок — константний літерал без жодного користувацького вводу чи конкатенації; викликається лише в Development/--reset-database для очищення навчальних таблиць; не приймає зовнішні дані жодним чином
+Scaffolding/Lab02Endpoints.cs, GET /api/incidents/search	(було: FromSqlRaw з конкатенацією q/sortBy)	Виправлено	Замінено на EF.Functions.ILike(..., pattern, escapeString) (параметризовано) + switch-allowlist для sortBy; жодного SQL-тексту, зібраного з недовіреного вводу
