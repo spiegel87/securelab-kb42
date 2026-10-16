@@ -20,6 +20,7 @@ public sealed class IncidentCommands(SecureLabDbContext dbContext, ILogger<Incid
 
     public async Task<CreateIncidentResult> CreateAsync(
         CreateIncidentRequest request,
+        Guid ownerUserId,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -91,7 +92,7 @@ public sealed class IncidentCommands(SecureLabDbContext dbContext, ILogger<Incid
         var incident = new Incident
         {
             Id = Guid.NewGuid(),
-            OwnerUserId = DbSeeder.AliceId,
+            OwnerUserId = ownerUserId,
             Title = title,
             Description = description,
             Severity = severity,

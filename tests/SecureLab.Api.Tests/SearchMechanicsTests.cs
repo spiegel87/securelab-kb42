@@ -80,6 +80,7 @@ public sealed class SearchMechanicsTests(SecureLabApiFactory factory) : IClassFi
     [Fact]
     public async Task CreateIncident_ValidRequest_ThenDuplicateActiveTitle_ReturnsConflict()
     {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
         var title = $"Regression-{Guid.NewGuid():N}";
         var request = new
         {
@@ -89,16 +90,17 @@ public sealed class SearchMechanicsTests(SecureLabApiFactory factory) : IClassFi
             occurredAtUtc = DateTimeOffset.UtcNow
         };
 
-        using var firstResponse = await _client.PostAsJsonAsync("/api/incidents", request);
+        using var firstResponse = await alice.PostAsJsonAsync("/api/incidents", request);
         Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
 
-        using var secondResponse = await _client.PostAsJsonAsync("/api/incidents", request);
+        using var secondResponse = await alice.PostAsJsonAsync("/api/incidents", request);
         Assert.Equal(HttpStatusCode.Conflict, secondResponse.StatusCode);
     }
 
     [Fact]
     public async Task CreateIncident_NumericSeverityString_ReturnsValidationProblem()
     {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
         var request = new
         {
             title = $"Regression-{Guid.NewGuid():N}",
@@ -107,10 +109,15 @@ public sealed class SearchMechanicsTests(SecureLabApiFactory factory) : IClassFi
             occurredAtUtc = DateTimeOffset.UtcNow
         };
 
-        using var response = await _client.PostAsJsonAsync("/api/incidents", request);
+        using var response = await alice.PostAsJsonAsync("/api/incidents", request);
         var json = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("severity", json, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string StudyPassword =>
+        Environment.GetEnvironmentVariable("SeedUsers__Password")
+        ?? throw new InvalidOperationException("Set local SeedUsers__Password outside Git.");
+
 }

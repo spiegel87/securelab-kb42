@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Application.Incidents;
+using System.Security.Claims;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -70,9 +71,16 @@ public static class Lab02Endpoints
             }));
         });
 
-        app.MapPost("/api/incidents", async (CreateIncidentRequest request, IncidentCommands commands, CancellationToken ct) =>
+        app.MapPost("/api/incidents", async (CreateIncidentRequest request, HttpContext httpContext, IncidentCommands commands, CancellationToken ct) =>
         {
-            var result = await commands.CreateAsync(request, ct);
+            // Власник нового інциденту: лише з верифікованого principal, не з body і не з header.
+            var userId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userId, out var ownerUserId))
+            {
+                return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            var result = await commands.CreateAsync(request, ownerUserId, ct);
             return result switch
             {
                 CreateIncidentResult.ValidationFailed failed => Results.ValidationProblem(failed.Errors),
@@ -80,7 +88,7 @@ public static class Lab02Endpoints
                 CreateIncidentResult.Created created => Results.Created($"/api/incidents/{created.Response.Id}", created.Response),
                 _ => throw new InvalidOperationException("Unknown CreateIncidentResult case")
             };
-        });
+        }).RequireAuthorization();
     }
 }
 
