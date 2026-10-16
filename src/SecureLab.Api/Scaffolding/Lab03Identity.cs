@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using System.Security.Claims;
+using SecureLab.Api.Security;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -100,18 +101,34 @@ public static class Lab03Identity
             return Results.Created("/api/me", new RegisteredUserResponse(user.Id, user.UserName!, user.DisplayName));
         });
         
-        app.MapPost("/api/auth/login", async (LoginInput input, SignInManager<ApplicationUser> signIn) =>
+        app.MapPost("/api/auth/login", async (LoginInput input, SignInManager<ApplicationUser> signIn,
+            UserManager<ApplicationUser> users, HttpContext httpContext) =>
         {
             if (string.IsNullOrWhiteSpace(input.UserName) || string.IsNullOrEmpty(input.Password))
+            {
+                AuthenticationEvents.Write(httpContext, "login", "failure", "unidentified");
                 return Results.Unauthorized();
+            }
+
             var result = await signIn.PasswordSignInAsync(input.UserName, input.Password, false, false);
-            return result.Succeeded ? Results.NoContent() : Results.Unauthorized();
-        });
+            if (!result.Succeeded)
+            {
+                // Однакова подія й однакова відповідь для невідомого імені та хибного пароля.
+                AuthenticationEvents.Write(httpContext, "login", "failure", "unidentified");
+                return Results.Unauthorized();
+            }
+
+            var user = await users.FindByNameAsync(input.UserName);
+            AuthenticationEvents.Write(httpContext, "login", "success", user?.Id.ToString() ?? "unknown");
+            return Results.NoContent();
+        }).RequireRateLimiting(LoginRateLimiting.PolicyName);
 
         // Logout ідемпотентний: 204 і для користувача без чинної cookie. Видалення cookie робить Identity.
-        app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signIn) =>
+        app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signIn, HttpContext httpContext) =>
         {
+            var userRef = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
             await signIn.SignOutAsync();
+            AuthenticationEvents.Write(httpContext, "logout", "success", userRef);
             return Results.NoContent();
         });
 
