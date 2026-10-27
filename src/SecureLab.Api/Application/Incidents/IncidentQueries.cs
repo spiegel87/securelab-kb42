@@ -8,12 +8,13 @@ namespace SecureLab.Api.Application.Incidents;
 public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<IncidentQueries> logger)
 {
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
+        IncidentActor actor,
         IncidentStatus? status,
         CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incidents with status filter {Status}", status);
 
-        var query = dbContext.Incidents.AsNoTracking();
+        var query = VisibleTo(dbContext.Incidents.AsNoTracking(), actor);
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
@@ -31,12 +32,11 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .ToListAsync(cancellationToken);
     }
 
-    public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
+    public Task<IncidentDetailsResponse?> GetDetailsAsync(IncidentActor actor, Guid id, CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incident {IncidentId}", id);
 
-        return dbContext.Incidents
-            .AsNoTracking()
+        return VisibleTo(dbContext.Incidents.AsNoTracking(), actor)
             .Where(incident => incident.Id == id)
             .Select(incident => new IncidentDetailsResponse(
                 incident.Id,
@@ -86,4 +86,21 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 
       return ordered;
     }
+
+     // Єдине місце правила видимості (query scoping): що саме користувач може побачити.
+    private static IQueryable<Incident> VisibleTo(IQueryable<Incident> query, IncidentActor actor)
+    {
+        if (actor.Role == DbSeeder.AnalystRole)
+        {
+            return query;                                   // аналітик бачить усе для аналізу
+        }
+
+        if (actor.Role == DbSeeder.ReporterRole)
+        {
+            var userId = actor.UserId;
+            return query.Where(incident => incident.OwnerUserId == userId);
+        }
+
+        return query.Where(incident => false);              // Administrator: право не опубліковано
+    }   
 }

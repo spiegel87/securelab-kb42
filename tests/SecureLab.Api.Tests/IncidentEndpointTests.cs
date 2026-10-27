@@ -11,11 +11,16 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
+    private static string StudyPassword =>
+        Environment.GetEnvironmentVariable("SeedUsers__Password")
+        ?? throw new InvalidOperationException("Set local SeedUsers__Password outside Git.");
+
     [Fact]
     public async Task GetList_ReturnsSeededIncidents()
     {
-        var incidents = await _client.GetFromJsonAsync<List<IncidentListItemResponse>>(
-            "/api/incidents");
+        // Analyst бачить усі інциденти для аналізу.
+        using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+        var incidents = await morgan.GetFromJsonAsync<List<IncidentListItemResponse>>("/api/incidents");
 
         Assert.NotNull(incidents);
         Assert.Contains(incidents, incident => incident.Id == DbSeeder.AliceIncidentId);
@@ -25,7 +30,8 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetDetails_ForUnknownId_ReturnsProblemDetails404()
     {
-        using var response = await _client.GetAsync($"/api/incidents/{Guid.NewGuid()}");
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+        using var response = await alice.GetAsync($"/api/incidents/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
@@ -34,8 +40,8 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetDetails_DoesNotExposeInternalOwnerFields()
     {
-        using var response = await _client.GetAsync(
-            $"/api/incidents/{DbSeeder.AliceIncidentId}");
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+        using var response = await alice.GetAsync($"/api/incidents/{DbSeeder.AliceIncidentId}");
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
 
@@ -44,7 +50,7 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
         Assert.False(document.RootElement.TryGetProperty("email", out _));
         Assert.Equal("Аліса Коваль", document.RootElement.GetProperty("ownerDisplayName").GetString());
     }
-
+            
     [Fact]
     public async Task ClientScript_DoesNotUseDangerousInnerHtmlSink()
     {

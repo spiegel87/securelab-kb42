@@ -9,7 +9,8 @@ public static class IncidentEndpoints
     public static IEndpointRouteBuilder MapIncidentEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/incidents")
-            .WithTags("Incidents");
+            .WithTags("Incidents")
+            .RequireAuthorization();
 
         group.MapGet("/", GetListAsync)
             .WithName("GetIncidents")
@@ -32,8 +33,14 @@ public static class IncidentEndpoints
     private static async Task<IResult> GetListAsync(
         string? status,
         IncidentQueries queries,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HttpContext httpContext)
     {
+        var actor = IncidentActor.From(httpContext.User);
+        if (actor is null)
+        {
+            return Results.Unauthorized();
+        }
         IncidentStatus? parsedStatus = null;
         if (status is not null)
         {
@@ -49,19 +56,27 @@ public static class IncidentEndpoints
             parsedStatus = candidate;
         }
 
-        return Results.Ok(await queries.GetListAsync(parsedStatus, cancellationToken));
+        return Results.Ok(await queries.GetListAsync(actor, parsedStatus, cancellationToken));
     }
 
     private static async Task<IResult> GetDetailsAsync(
         Guid id,
+        HttpContext httpContext,
         IncidentQueries queries,
         CancellationToken cancellationToken)
     {
-        var incident = await queries.GetDetailsAsync(id, cancellationToken);
+        var actor = IncidentActor.From(httpContext.User);
+        if (actor is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        // Чужий і неіснуючий ресурс неможливо відрізнити: однакова відповідь, id у тілі немає.
+        var incident = await queries.GetDetailsAsync(actor, id, cancellationToken);
         return incident is null
             ? Results.Problem(
-                title: "Інцидент не знайдено",
-                detail: $"Інцидент '{id}' не існує.",
+                title: "Ресурс не знайдено",
+                detail: "Запитаний ресурс не знайдено.",
                 statusCode: StatusCodes.Status404NotFound)
             : Results.Ok(incident);
     }
