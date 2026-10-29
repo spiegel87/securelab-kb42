@@ -23,6 +23,7 @@ builder.Services.AddDbContext<SecureLabDbContext>(options =>
 builder.Services.AddScoped<IncidentQueries>();
 builder.Services.AddScoped<IncidentQueries>();
 builder.Services.AddScoped<IncidentCommands>();
+builder.Services.AddScoped<IncidentChanges>();
 
 builder.AddLab03Identity();
 builder.AddLoginRateLimiting();

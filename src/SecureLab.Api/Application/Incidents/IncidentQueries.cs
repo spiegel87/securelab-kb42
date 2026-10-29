@@ -14,7 +14,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
     {
         logger.LogInformation("Loading incidents with status filter {Status}", status);
 
-        var query = VisibleTo(dbContext.Incidents.AsNoTracking(), actor);
+        var query = IncidentAccessPolicy.VisibleTo(dbContext.Incidents.AsNoTracking(), actor);
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
@@ -36,7 +36,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
     {
         logger.LogInformation("Loading incident {IncidentId}", id);
 
-        return VisibleTo(dbContext.Incidents.AsNoTracking(), actor)
+        return IncidentAccessPolicy.VisibleTo(dbContext.Incidents.AsNoTracking(), actor)
             .Where(incident => incident.Id == id)
             .Select(incident => new IncidentDetailsResponse(
                 incident.Id,
@@ -87,20 +87,5 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
       return ordered;
     }
 
-     // Єдине місце правила видимості (query scoping): що саме користувач може побачити.
-    private static IQueryable<Incident> VisibleTo(IQueryable<Incident> query, IncidentActor actor)
-    {
-        if (actor.Role == DbSeeder.AnalystRole)
-        {
-            return query;                                   // аналітик бачить усе для аналізу
-        }
-
-        if (actor.Role == DbSeeder.ReporterRole)
-        {
-            var userId = actor.UserId;
-            return query.Where(incident => incident.OwnerUserId == userId);
-        }
-
-        return query.Where(incident => false);              // Administrator: право не опубліковано
-    }   
+   
 }

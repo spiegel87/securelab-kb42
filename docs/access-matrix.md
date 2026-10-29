@@ -17,9 +17,9 @@
 | Зведення `GET /api/incidents/severity-summary` | відмінний (A-11) | — | — | — | — | — | не виконувалось — рівень «Відмінно» |
 | Перегляд деталей `GET /api/incidents/{id}` | достатній, головна action | deny, `401` | owner — allow `200`; non-owner — deny `404` | allow `200` для аналізу | deny, `404` | Так | не реалізовано (vulnerable) |
 | Створення інциденту | успадкований baseline | deny, `401` | allow, власник = principal | allow, власник = principal | не змінюється в ЛР 4 | Сервер призначає власника | перевірено в ЛР 3 |
-| Update content (`title`, `description`) | добрий | deny, `401` | owner — allow `200`; non-owner — deny `404` | deny `403` | deny `404` | Так | не реалізовано |
-| Delete | добрий | deny, `401` | owner — allow `204` лише при статусі `New`, інакше `403`; non-owner — `404` | deny `403` | deny `404` | Так | не реалізовано |
-| Зміна status (`POST /api/incidents/{id}/triage`) | добрий | deny, `401` | deny `403` (owner), `404` (non-owner) | allow лише `New → Triaged`, інакше `403`; наступний status ставить сервер | deny `404` | Ні: роль + поточний status; ресурс має бути видимий | не реалізовано |
+| Update content (`title`, `description`) | добрий | deny, `401` | owner — allow `200`; non-owner — deny `404` | deny `403` | deny `404` | Так | IncidentAccessPolicy; тести A-04, A-06, A-07, A-08a, A-09 |
+| Delete | добрий | deny, `401` | owner — allow `204` лише при статусі `New`, інакше `403`; non-owner — `404` | deny `403` | deny `404` | Так | IncidentAccessPolicy; тести A-04, A-06, A-07, A-08a, A-09 |
+| Зміна status (`POST /api/incidents/{id}/triage`) | добрий | deny, `401` | deny `403` (owner), `404` (non-owner) | allow лише `New → Triaged`, інакше `403`; наступний status ставить сервер | deny `404` | Ні: роль + поточний status; ресурс має бути видимий | IncidentAccessPolicy; тести A-04, A-06, A-07, A-08a, A-09 |
 | Internal comment `GET /api/incident-comments/{id}` | добрий | deny, `401` | чужий parent або `IsInternal` — `404`; свій не-internal — allow | allow після авторизації parent incident | deny `404` | Ні для internal; parent перевіряється окремо | не реалізовано |
 | Export/audit | відмінний | — | — | — | — | — | не застосовується — flow відсутній |
 
