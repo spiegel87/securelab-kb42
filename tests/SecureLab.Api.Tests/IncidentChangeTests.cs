@@ -177,6 +177,8 @@ public sealed class IncidentChangeTests(SecureLabApiFactory factory)
         using var denied = await alice.PostAsync($"/api/incidents/{id}/triage", content: null);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
 
+        using var deniedBody = JsonDocument.Parse(await denied.Content.ReadAsStringAsync());
+        var responseTrace = deniedBody.RootElement.GetProperty("traceId").GetString();
         var events = provider.Messages
             .Where(message => message.StartsWith(AuthorizationEvents.Category + "|", StringComparison.Ordinal))
             .ToArray();
@@ -186,5 +188,7 @@ public sealed class IncidentChangeTests(SecureLabApiFactory factory)
             && e.Contains($"actor {DbSeeder.AliceId}", StringComparison.Ordinal)
             && e.Contains($"resource {id}", StringComparison.Ordinal));
         Assert.DoesNotContain(provider.Messages, m => m.Contains(StudyPassword, StringComparison.Ordinal));
+        Assert.Contains(events, e => e.Contains($"trace {responseTrace}", StringComparison.Ordinal));
+        Assert.Contains(events, e => e.Contains("result denied", StringComparison.Ordinal));        
     }
 }
