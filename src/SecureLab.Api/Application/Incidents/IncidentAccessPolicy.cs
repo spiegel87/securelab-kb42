@@ -23,6 +23,17 @@ public static class IncidentAccessPolicy
         return query.Where(incident => false);                  // Administrator: право не опубліковано
     }
 
+    // Child-ресурс: коментар видимий лише разом із видимим parent incident.
+    // Internal-коментар бачить лише Analyst.
+    public static IQueryable<IncidentComment> VisibleCommentsTo(
+        IQueryable<IncidentComment> comments, IQueryable<Incident> visibleIncidents, IncidentActor actor)
+    {
+        var scoped = comments.Where(comment => visibleIncidents.Any(incident => incident.Id == comment.IncidentId));
+        return actor.Role == DbSeeder.AnalystRole
+            ? scoped
+            : scoped.Where(comment => !comment.IsInternal);
+    }    
+
     // Редагування змісту: лише власник-Reporter.
     public static bool CanEditContent(IncidentActor actor, Incident incident) =>
         actor.Role == DbSeeder.ReporterRole && incident.OwnerUserId == actor.UserId;

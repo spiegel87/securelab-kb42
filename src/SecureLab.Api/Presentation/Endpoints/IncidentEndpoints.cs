@@ -136,7 +136,7 @@ public static class IncidentEndpoints
     }
 
     // Єдина відповідь для «не знайдено / не видно»: ту саму використовує і details (A-10).
-    private static IResult NotFoundProblem() => Results.Problem(
+    internal static IResult NotFoundProblem() => Results.Problem(
         title: "Ресурс не знайдено",
         detail: "Запитаний ресурс не знайдено.",
         statusCode: StatusCodes.Status404NotFound);

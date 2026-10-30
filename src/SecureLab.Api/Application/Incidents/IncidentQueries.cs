@@ -59,6 +59,20 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+       public Task<IncidentCommentResponse?> GetCommentAsync(
+        IncidentActor actor, Guid commentId, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Loading incident comment {CommentId}", commentId);
+
+        var visibleIncidents = IncidentAccessPolicy.VisibleTo(dbContext.Incidents.AsNoTracking(), actor);
+        return IncidentAccessPolicy.VisibleCommentsTo(
+                dbContext.IncidentComments.AsNoTracking(), visibleIncidents, actor)
+            .Where(comment => comment.Id == commentId)
+            .Select(comment => new IncidentCommentResponse(
+                comment.Id, comment.Author.DisplayName, comment.Text, comment.CreatedAtUtc))
+            .SingleOrDefaultAsync(cancellationToken);
+    } 
+
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
       IncidentStatus? status,
       CancellationToken cancellationToken)
