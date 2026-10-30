@@ -27,7 +27,7 @@ Vulnerable commit: `c3f02e7f202e62bf24145cf01f9db9f061571e27`. Details у ЛР 3
 Cookie та пароль у доказах не показано.
 
 ## Виправлення та retest
-Fixed commit = тег `v0.4.0`: `<hash тегу>` (вписано наступним commit після тегу).
+Fixed commit = тег `de72e07b708ed972e3d9aac485f038e8015e06dd` (вписано наступним commit після тегу).
 
 | Дія | До | Після |
 |---|---|---|
