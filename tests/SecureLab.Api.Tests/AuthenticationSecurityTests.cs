@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using SecureLab.Api.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
+using SecureLab.Api.Data.Entities;
 
 namespace SecureLab.Api.Tests;
 
@@ -103,5 +106,51 @@ public sealed class AuthenticationSecurityTests(SecureLabApiFactory factory)
         Assert.Empty(wrong.Headers.WwwAuthenticate);
         // type, title, status, detail (разом із наявністю); traceId свідомо не порівнюємо.
         Assert.Equal(await ProblemShape.ReadAsync(unknown), await ProblemShape.ReadAsync(wrong));
+    }
+    
+    [Fact]
+    public async Task Login_UsesPasswordExactly_ExactSucceeds_TrimmedFails()
+    {
+        const string spacedPassword = " Synthetic-Space-77! ";
+
+        using var host = factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("LoginRateLimit:PermitLimit", "100"));
+
+        var userName = "space" + Guid.NewGuid().ToString("N")[..10];
+        Guid userId;
+        using (var scope = host.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = userName,
+                Email = $"{userName}@example.test",
+                DisplayName = "Space Tester"
+            };
+            Assert.True((await users.CreateAsync(user, spacedPassword)).Succeeded);
+            Assert.True((await users.AddToRoleAsync(user, DbSeeder.ReporterRole)).Succeeded);
+            userId = user.Id;
+        }
+
+        using var exactClient = host.CreateClient();
+        using var trimmedClient = host.CreateClient();
+
+        using var exactLogin = await exactClient.PostAsJsonAsync(
+            "/api/auth/login", new { userName, password = spacedPassword });
+        using var trimmedLogin = await trimmedClient.PostAsJsonAsync(
+            "/api/auth/login", new { userName, password = spacedPassword.Trim() });
+
+        Assert.Equal(HttpStatusCode.NoContent, exactLogin.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, trimmedLogin.StatusCode);
+
+        using var exactMe = await exactClient.GetAsync("/api/me");
+        using var trimmedMe = await trimmedClient.GetAsync("/api/me");
+        Assert.Equal(HttpStatusCode.OK, exactMe.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, trimmedMe.StatusCode);
+
+        using var document = JsonDocument.Parse(await exactMe.Content.ReadAsStringAsync());
+        Assert.Equal(userId, document.RootElement.GetProperty("id").GetGuid());
+        Assert.Equal(userName, document.RootElement.GetProperty("userName").GetString());
     }
 }
