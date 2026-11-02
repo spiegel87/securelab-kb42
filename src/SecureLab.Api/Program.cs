@@ -28,6 +28,20 @@ builder.Services.AddScoped<IncidentChanges>();
 builder.AddLab03Identity();
 builder.AddLoginRateLimiting();
 
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("Lab05BrowserProbe", policy =>
+        {
+            policy.WithOrigins("http://localhost:4173")
+                  .WithMethods("GET")
+                  .WithHeaders("X-Lab-Cors-Probe")
+                  .AllowCredentials();
+        });
+    });
+}
+
 var app = builder.Build();
 
 var resetRequested = args.Contains("--reset-database", StringComparer.Ordinal);
@@ -52,6 +66,12 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+}
+
+app.UseRouting();
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("Lab05BrowserProbe");
 }
 
 app.UseAuthentication();

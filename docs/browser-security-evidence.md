@@ -83,3 +83,25 @@ DOM-тест: файл/команда, browser, vulnerable commit і FAIL, fixed
 - Bob (контроль): GET 404, перевірка повертає null.
 - Класифікація: stored XSS. Значення збережено в БД і виконується під час пізнішого перегляду.
 - Вплив: код працює від імені глядача (Analyst) і має ті права доступу, які ЛР 4 надає цій ролі.
+
+
+## CORS: прогноз до зміни конфігурації
+
+| Сценарій | Чи доходить request до API? | Чи може JS прочитати response? | Чому |
+|---|---|---|---|
+| same-origin 5080 | так | так | CORS не потрібен, той самий origin |
+| simple GET з probe 4173 | так | ні без policy | SOP/CORS у браузері |
+| запит із заголовком з 4173 | спочатку лише OPTIONS | ні без успішного preflight | browser preflight |
+| simple GET з probe 4174 | так | ні (origin не в allowlist) | SOP/CORS |
+| curl | так | не застосовується | це не JavaScript у браузері |
+
+
+## CORS: фактичні результати
+
+- Policy Lab05BrowserProbe: навчальний Development-стенд; origin лише http://localhost:4173, метод GET, заголовок X-Lab-Cors-Probe, AllowCredentials. У Production не реєструється. Штатна топологія: same-origin http://localhost:5080.
+- Probes: python3 -m http.server 4173 (і 4174) --bind localhost --directory demonstrations/cors-probe.
+- До policy: simple і preflighted запити з 4173 та 4174 блоковані браузером; запит до API доходив (Origin, немає Allow-Origin).
+- Після policy: 4173 simple GET 200 з Allow-Origin; з заголовком OPTIONS 204 і GET 200; 4174 simple GET блокується для JS (запит дійшов), preflight без Allow-* і actual GET не надсилається.
+- Cookie: без AllowCredentials браузер відхиляє credentialed response; з AllowCredentials 4173 читає 200 зі списком, 4174 response не отримує, але запит із cookie виконано.
+- curl: Origin 4173 -> Allow-Origin присутній; Origin 4174 -> відсутній; статус 200 в обох: це не SOP.
+- Review: CORS керує лише тим, чи браузер надає cross-origin response JavaScript. Він не є authorization (401/403 діють незалежно) і не замінює CSRF-захист: state-changing request з cookie потребує antiforgery, це ЛР 6. Wildcard і AllowAnyOrigin заборонені.
