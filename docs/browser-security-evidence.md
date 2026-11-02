@@ -105,3 +105,49 @@ DOM-тест: файл/команда, browser, vulnerable commit і FAIL, fixed
 - Cookie: без AllowCredentials браузер відхиляє credentialed response; з AllowCredentials 4173 читає 200 зі списком, 4174 response не отримує, але запит із cookie виконано.
 - curl: Origin 4173 -> Allow-Origin присутній; Origin 4174 -> відсутній; статус 200 в обох: це не SOP.
 - Review: CORS керує лише тим, чи браузер надає cross-origin response JavaScript. Він не є authorization (401/403 діють незалежно) і не замінює CSRF-захист: state-changing request з cookie потребує antiforgery, це ЛР 6. Wildcard і AllowAnyOrigin заборонені.
+
+
+## CSP та browser headers
+
+| Директива | Фактична потреба застосунку | Обране джерело | Що обмежує |
+|---|---|---|---|
+| default-src | усі ресурси клієнта з власного origin | 'self' | неявні типи ресурсів |
+| script-src (fallback) | лише власні JS-файли | 'self' | inline і сторонні скрипти |
+| connect-src (fallback) | fetch до API того ж origin | 'self' | сторонні браузерні з'єднання |
+| frame-ancestors | вбудовування не потрібне | 'none' | clickjacking через embedding |
+
+Аудит Client/ (grep): inline style, inline-обробників і зовнішніх хостів немає, усі script мають src. Навчальні origins 4173/4174 до постійної CSP не входять. Виняток: /scalar лише в Development (сторонній UI-пакет); це залишковий ризик, у ЛР 6 перевіряється окремо. Третіх сторін у дослідженому flow немає.
+
+| Header | Політика | Ризик, який зменшує | Чого не замінює |
+|---|---|---|---|
+| X-Content-Type-Options | nosniff (baseline) | небажане MIME sniffing | правильний Content-Type і validation |
+| Referrer-Policy | no-referrer (baseline) | витік URL через Referer; клієнт не потребує referrer | заборону секретів в URL |
+| CSP frame-ancestors | 'none' | embedding/clickjacking | авторизацію і виправлення XSS |
+
+Спостереження: заголовки видно у відповіді browser-lab.html (200, один CSP-заголовок); керований порушник new Image() заблоковано з повідомленням про default-src.
+
+## REG-XSS-01
+
+| Поле | Вміст |
+|---|---|
+| Передумови | fixed commit лишається поточним; vulnerable 5a5ecb0; reset: dotnet run --project src/SecureLab.Api -- --reset-database; акаунти alice (автор) і morgan (Analyst); origin http://localhost:5080 |
+| Вхід | marker з resources/lab05-marker.txt (однорядковий, без зовнішніх хостів) |
+| Кроки | Alice створює запис із marker в Description через browser-lab.html; Morgan відкриває за Guid; відкрити інцидент Alice з comment-5 |
+| Очікуваний результат | перевірка data-lab05-marker повертає null; #description містить один текстовий вузол без дочірніх елементів; в #comments немає img; звичайний текст (лапки, < і >, Unicode, теги b) показується буквально |
+| Негативний контроль | на vulnerable 5a5ecb0 marker ставив executed (Alice і Morgan) |
+| Доказ | Network, Elements, Console; файл Client/browser-lab.js (helper renderText) |
+
+Значення description у БД і в JSON відповіді API однакове до і після fix; змінилось лише відображення в DOM.
+
+## REG-CORS-01
+
+Browser: probes 4173 (дозволений) і 4174 (контрольний), API 5080; код сторінки на 4174 response не отримує, у Network є запит до http://localhost:5080 з Origin. HTTP: curl з Origin 4173 повертає Access-Control-Allow-Origin: http://localhost:4173 і Access-Control-Allow-Credentials: true; з Origin 4174 жодного Access-Control-*; статус 200 в обох, бо curl не застосовує SOP.
+
+## Підсумок: до -> першопричина -> fix -> retest -> залишковий ризик
+
+| Об'єкт | До | Першопричина | Fix | Retest | Залишковий ризик |
+|---|---|---|---|---|---|
+| Incident.Description | marker виконано (Alice, Morgan) | innerHTML для збереженого значення | renderText (textContent) | null, текстовий вузол, API без змін | CSRF для POST /api/incidents до ЛР 6 |
+| IncidentComment.Text | marker виконано | innerHTML | той самий helper | в #comments немає img, null | інші клієнти, що самі рендерять HTML |
+| CORS | без policy браузер блокує 4173 і 4174 | немає Allow-Origin | Development-only Lab05BrowserProbe, точний origin 4173 | 4173 читає response, 4174 ні, preflight 204 | CORS не замінює CSRF і авторизацію |
+| CSP | відсутня | немає другого шару проти XSS | default-src 'self'; frame-ancestors 'none' | клієнт працює, new Image() заблоковано | виняток /scalar у Development |
