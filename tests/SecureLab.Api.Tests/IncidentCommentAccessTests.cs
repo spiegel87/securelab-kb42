@@ -2,6 +2,8 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using SecureLab.Api.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SecureLab.Api.Tests;
 
@@ -34,6 +36,15 @@ public sealed class IncidentCommentAccessTests(SecureLabApiFactory factory)
         using var document = await ReadAsync(response);
         return document.RootElement.TryGetProperty("text", out _);
     }
+
+    private static async Task<string[]> FieldNamesAsync(HttpResponseMessage response)
+    {
+        using var document = await ReadAsync(response);
+        return document.RootElement.EnumerateObject()
+            .Select(property => property.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+    }    
 
     // A-12: child endpoint підпорядковується parent; internal прихований від Reporter, details без internal.
     [Fact]
@@ -89,4 +100,63 @@ public sealed class IncidentCommentAccessTests(SecureLabApiFactory factory)
         using var adminResponse = await admin.GetAsync($"/api/incident-comments/{PublicOnAliceIncident}");
         Assert.Equal(HttpStatusCode.NotFound, adminResponse.StatusCode);
     }
+
+    // Захист: child-доступ визначає parent scope, а не збіг автора коментаря. Seed не змінюємо.
+    [Fact]
+    public async Task C2_ChildAccess_FollowsParentScope_NotAuthorMatch_WithC1Control()
+    {
+        // Факти беремо з БД: автор і власник parent для C2 та C1 (перевірка, що seed не підроблено).
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SecureLabDbContext>();
+        var facts = await db.IncidentComments.AsNoTracking()
+            .Where(comment => comment.Id == PublicOnBobIncident || comment.Id == PublicOnAliceIncident)
+            .Select(comment => new
+            {
+                comment.Id, comment.AuthorUserId, comment.IsInternal,
+                ParentOwner = comment.Incident.OwnerUserId
+            })
+            .ToDictionaryAsync(row => row.Id);
+        var c2 = facts[PublicOnBobIncident];
+        var c1 = facts[PublicOnAliceIncident];
+
+        Assert.Equal(DbSeeder.MorganId, c2.AuthorUserId);   // автор C2: Morgan
+        Assert.Equal(DbSeeder.BobId, c2.ParentOwner);       // parent C2 належить Bob
+        Assert.Equal(DbSeeder.MorganId, c1.AuthorUserId);   // контроль: автор C1 теж Morgan
+        Assert.Equal(DbSeeder.AliceId, c1.ParentOwner);     // але parent належить Alice
+        Assert.False(c2.IsInternal);
+        Assert.False(c1.IsInternal);
+
+        using var bob = await factory.LoginAsync("bob", StudyPassword);
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+        using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+
+        // C2 (parent I2 Bob): Bob allow як owner, Alice deny, Morgan allow через Analyst parent-read.
+        using var c2Bob = await bob.GetAsync($"/api/incident-comments/{PublicOnBobIncident}");
+        using var c2Alice = await alice.GetAsync($"/api/incident-comments/{PublicOnBobIncident}");
+        using var c2Morgan = await morgan.GetAsync($"/api/incident-comments/{PublicOnBobIncident}");
+
+        Assert.Equal(HttpStatusCode.OK, c2Bob.StatusCode);
+        Assert.Equal(PublicBobText, await TextAsync(c2Bob));
+        Assert.Equal(new[] { "authorDisplayName", "createdAtUtc", "id", "text" }, await FieldNamesAsync(c2Bob));
+        Assert.Equal(HttpStatusCode.NotFound, c2Alice.StatusCode);
+        Assert.False(await HasTextPropertyAsync(c2Alice));
+        Assert.Equal(HttpStatusCode.OK, c2Morgan.StatusCode);
+        Assert.Equal(PublicBobText, await TextAsync(c2Morgan));
+
+        // Контрприклад: author-only для Bob дав би "false", тоді як коректний parent scope дає 200.
+        var authorOnlyBob = c2.AuthorUserId == DbSeeder.BobId;
+        Assert.NotEqual(authorOnlyBob, c2Bob.StatusCode == HttpStatusCode.OK);
+
+        // C1 (parent I1 Alice), автор лишається Morgan: Alice allow, Bob deny, Morgan allow.
+        using var c1Alice = await alice.GetAsync($"/api/incident-comments/{PublicOnAliceIncident}");
+        using var c1Bob = await bob.GetAsync($"/api/incident-comments/{PublicOnAliceIncident}");
+        using var c1Morgan = await morgan.GetAsync($"/api/incident-comments/{PublicOnAliceIncident}");
+
+        Assert.Equal(HttpStatusCode.OK, c1Alice.StatusCode);
+        Assert.Equal(PublicAliceText, await TextAsync(c1Alice));
+        Assert.Equal(HttpStatusCode.NotFound, c1Bob.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, c1Morgan.StatusCode);
+        // Результат Morgan не змінився, а Alice і Bob помінялися місцями: рішення йде через parent.
+        Assert.NotEqual(c2.AuthorUserId == DbSeeder.AliceId, c1Alice.StatusCode == HttpStatusCode.OK);
+    } 
 }

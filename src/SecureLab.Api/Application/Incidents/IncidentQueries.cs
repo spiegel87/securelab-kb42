@@ -63,7 +63,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
         IncidentActor actor, Guid commentId, CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incident comment {CommentId}", commentId);
-
+        // PARENT-READ: parent-інциденти, які actor має право бачити; з них складається доступ до коментаря.
         var visibleIncidents = IncidentAccessPolicy.VisibleTo(dbContext.Incidents.AsNoTracking(), actor);
         return IncidentAccessPolicy.VisibleCommentsTo(
                 dbContext.IncidentComments.AsNoTracking(), visibleIncidents, actor)

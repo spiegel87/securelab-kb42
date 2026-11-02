@@ -28,7 +28,10 @@ public static class IncidentAccessPolicy
     public static IQueryable<IncidentComment> VisibleCommentsTo(
         IQueryable<IncidentComment> comments, IQueryable<Incident> visibleIncidents, IncidentActor actor)
     {
+        // PARENT-READ: коментар доступний лише тоді, коли його parent входить до visibleIncidents.
+        // Автор коментаря (AuthorUserId) у цьому правилі не бере участі: автор не дорівнює праву на parent.
         var scoped = comments.Where(comment => visibleIncidents.Any(incident => incident.Id == comment.IncidentId));
+        // INTERNAL-RULE: internal-коментар бачить лише Analyst; для інших ролей він відсікається.
         return actor.Role == DbSeeder.AnalystRole
             ? scoped
             : scoped.Where(comment => !comment.IsInternal);
