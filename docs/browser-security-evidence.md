@@ -74,3 +74,12 @@ Preflight з 4173 і 4174, OPTIONS → GET / blocked GET, exact origin/header/me
 DOM-тест: файл/команда, browser, vulnerable commit і FAIL, fixed commit і PASS: … Comments, повторний render без дублювання та позитивні рядки: … CSP report-only → enforcement: фактичні headers, flow і кероване порушення в обох режимах: … safe-url.js / атрибут: … Пояснення text/attribute/URL/JavaScript та ризик third-party scripts — посилання на DEL-03: …
 
 Додаткових DEL, навчальних демо або нового журналу не подавайте. Перед поданням повторіть чекліст для свого накопичувального рівня.
+
+## PoC до виправлення (stored XSS, без CSP)
+
+- Vulnerable commit: 5a5ecb0. Marker-record створила Alice, Guid: 87e11e29-932d-42dd-94ed-eaa8bc7f6bed.
+- Alice (автор): GET 200, marker виконано, перевірка повертає executed.
+- Morgan (Analyst): GET 200, перевірка повертає executed, тобто код виконано в сеансі привілейованого глядача.
+- Bob (контроль): GET 404, перевірка повертає null.
+- Класифікація: stored XSS. Значення збережено в БД і виконується під час пізнішого перегляду.
+- Вплив: код працює від імені глядача (Analyst) і має ті права доступу, які ЛР 4 надає цій ролі.
