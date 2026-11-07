@@ -1,6 +1,6 @@
 # Security review SecureLab, ЛР 6
 
-Рівень: добрий («Добре»); рівні накопичувальні. Commit початку огляду (review-start): ХЕШ_СТАРТУ. Дата: ДАТА. SDK 10.0.401. Профілі: Development і Production-like (no-launch-profile). Клієнти: браузер і HTTP-клієнт (.http / curl).
+Рівень: добрий («Добре»); рівні накопичувальні. Commit початку огляду (review-start): 1e032bc14d5c03bbd91e4c3cfed597a4f9250b67. Дата: ДАТА. SDK 10.0.401. Профілі: Development і Production-like (no-launch-profile). Клієнти: браузер і HTTP-клієнт (.http / curl).
 
 ## 1. Executive summary
 Один абзац: що перевірено, скільки знахідок зафіксовано й виправлено, результат фактичного фінального прогону, головні залишкові ризики.
@@ -9,7 +9,7 @@
 ## 3. System overview і trust boundaries
 Для всіх: див. threat-model.md. Добрий/відмінний: кожна межа → конкретний test; відмінний: asset → threat → control → verification.
 ## 4. Methodology та test environment
-Review-start commit: ХЕШ_СТАРТУ (гілка lab/6-hardening-review від main; v0.5.0 не переміщено). Локальна БД: PostgreSQL 127.0.0.1:54329 (Docker Compose), стан відновлено командою reset/seed у Development. Профілі: Development (dotnet run, launch profile http) і Production-like (--no-launch-profile -c Release). Клієнти: браузер (cookie-сеанс) і .http / curl. Кожна перевірка в розділах нижче вказує команду, код завершення й профіль.
+Review-start commit: 1e032bc14d5c03bbd91e4c3cfed597a4f9250b67 (гілка lab/6-hardening-review від main; v0.5.0 не переміщено). Локальна БД: PostgreSQL 127.0.0.1:54329 (Docker Compose), стан відновлено командою reset/seed у Development. Профілі: Development (dotnet run, launch profile http) і Production-like (--no-launch-profile -c Release). Клієнти: браузер (cookie-сеанс) і .http / curl. Кожна перевірка в розділах нижче вказує команду, код завершення й профіль.
 ## 5. Findings summary
 Таблиця: ID / актив / вплив / ймовірність / пріоритет / статус / ID повторної перевірки.
 ## 6. Detailed findings
