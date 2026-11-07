@@ -151,3 +151,15 @@ Browser: probes 4173 (дозволений) і 4174 (контрольний), AP
 | IncidentComment.Text | marker виконано | innerHTML | той самий helper | в #comments немає img, null | інші клієнти, що самі рендерять HTML |
 | CORS | без policy браузер блокує 4173 і 4174 | немає Allow-Origin | Development-only Lab05BrowserProbe, точний origin 4173 | 4173 читає response, 4174 ні, preflight 204 | CORS не замінює CSRF і авторизацію |
 | CSP | відсутня | немає другого шару проти XSS | default-src 'self'; frame-ancestors 'none' | клієнт працює, new Image() заблоковано | виняток /scalar у Development |
+
+
+
+## Захист ЛР 5: три CORS-проби (прогноз до запуску)
+
+Зафіксовано тимчасовий logger пише лише method, path, Origin (query у журнал не потрапляє). Allowlist без змін: 4173, GET, X-Lab-Cors-Probe.
+
+| Проба | Origin | Запит | Прогноз fetch | Прогноз рядків журналу | Actual GET на сервері (прогноз) | Факт fetch | Факт журналу |
+|---|---|---|---|---|---|---|---|
+| a | 4174 | /health?case=kb42-a + X-Lab-Cors-Probe: stage-3 | TypeError: Failed to fetch (preflight не пройшов) | 1 рядок: OPTIONS /health Origin=http://localhost:4174 | ні | | |
+| b | 4174 | /health?case=kb42-b без custom header | TypeError: Failed to fetch (response без Allow-Origin) | 1 рядок: GET /health Origin=http://localhost:4174 | так | | |
+| c | 4173 | /health?case=kb42-c + X-Lab-Cors-Probe: stage-3 | resolve: status 200, body {"status":"ready"} | 2 рядки: OPTIONS, потім GET, обидва Origin=http://localhost:4173 | так | | |
