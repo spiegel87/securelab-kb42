@@ -27,6 +27,7 @@ builder.Services.AddScoped<IncidentChanges>();
 
 builder.AddLab03Identity();
 builder.AddLoginRateLimiting();
+builder.AddSearchRateLimiting();
 
 if (builder.Environment.IsDevelopment())
 {

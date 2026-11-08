@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Net.Http.Json;
 
 namespace SecureLab.Api.Tests;
 
@@ -79,5 +80,30 @@ public sealed class ProductionProfileTests(SecureLabApiFactory factory)
         using var response = await anonymous.GetAsync("/api/incidents");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Production_Cookies_AreHttpOnly_Secure_WithSameSite()
+    {
+        using var production = CreateProduction();
+        using var client = production.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = true
+        });
+
+        using var login = await client.PostAsJsonAsync("/api/auth/login",
+            new { userName = "alice", password = StudyPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        var authCookie = Assert.Single(login.Headers.GetValues("Set-Cookie")).ToLowerInvariant();
+        Assert.Contains("; secure", authCookie);
+        Assert.Contains("; httponly", authCookie);
+        Assert.Contains("samesite=lax", authCookie);
+
+        using var token = await client.GetAsync("/api/auth/csrf-token");
+        Assert.Equal(HttpStatusCode.OK, token.StatusCode);
+        var afCookie = Assert.Single(token.Headers.GetValues("Set-Cookie")).ToLowerInvariant();
+        Assert.Contains("securelab-af", afCookie);
+        Assert.Contains("; secure", afCookie);
+        Assert.Contains("; httponly", afCookie);
     }
 }

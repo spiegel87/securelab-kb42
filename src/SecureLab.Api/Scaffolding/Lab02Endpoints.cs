@@ -70,7 +70,7 @@ public static class Lab02Endpoints
                 row.Id, row.Title, row.Description,
                 Severity = row.Severity.ToString(), Status = row.Status.ToString(), row.CreatedAtUtc
             }));
-        });
+        }).RequireRateLimiting(SearchRateLimiting.PolicyName);
 
         app.MapPost("/api/incidents", async (CreateIncidentRequest request, HttpContext httpContext, IncidentCommands commands, CancellationToken ct) =>
         {
