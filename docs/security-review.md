@@ -50,6 +50,29 @@ DISCREPANCY для SC-05..SC-07: маршрут є в коді й OpenAPI, ал�
 
 Контракт antiforgery (сервер ↔ клієнт): header X-SecureLab-CSRF; маршрут видачі GET /api/auth/csrf-token (RequireAuthorization, відповідь без кешування); antiforgery-cookie securelab-af (Secure Always поза Development); єдине місце валідації AntiforgeryFilter у Security/AntiforgeryProtection.cs (відмова: 400 Problem Details); клієнт: csrf-helper.js (токен одержується ліниво на кожній сторінці, лише в пам'яті, скидається після login, logout, 400/401 і pageshow). Токен не копіюється в storage; значення токена в докази не потрапляють.
 
+
+### Транспорт, cookie-профіль і обмеження частоти запитів
+
+**Транспорт (конфігурація).** У launchSettings.json єдиний профіль http (http://localhost:5080); у Program.cs немає UseHttpsRedirection() та UseHsts(). Отже сам baseline не надає доказу HTTPS/HSTS. Local HTTP profile не доводить production transport safety: реальний TLS, HTTP→HTTPS redirect (за замовчуванням 307) і HSTS response на production host не тестувалися. Відсутність Strict-Transport-Security на loopback не класифікується як дефект: за замовчуванням UseHsts не додає його для loopback-хостів. HTTPS, redirect і HSTS виконують різні ролі.
+
+| Cookie | Development (curl, значення приховано) | Production (test host, https://localhost) |
+|---|---|---|
+| Автентифікації (Identity) | HttpOnly; SameSite=Lax; без Secure (політика SameAsRequest на HTTP) | HttpOnly; Secure; SameSite=Lax (тест Production_Cookies_AreHttpOnly_Secure_WithSameSite) |
+| Antiforgery securelab-af | HttpOnly; SameSite=Strict | HttpOnly; Secure (той самий тест) |
+
+TestServer не доводить сертифікат і реальне шифрування. Cookie не є захистом від CSRF сама по собі: SameSite=Lax не замінює antiforgery (localhost:4173 і localhost:5080 належать до одного site).
+
+**Rate limiting.**
+
+| Control | Partition key | Quota / window | Спостереження |
+|---|---|---|---|
+| POST /api/auth/login (наявний, ЛР 3) | IP | ЗА_КОНФІГУРАЦІЄЮ | відповіді на відомий логін із хибним паролем і на невідомий однакові (статус і розмір тіла: ЗНАЧЕННЯ); після послідовних спроб 429; після вікна вхід знову 204 |
+| GET /api/incidents/search (новий) | NameIdentifier з auth-cookie; запасний ключ за IP для анонімних | 30 запитів / 60 с, без черги | 30 відповідей 200 і 429 на 31-ту; інший користувач (morgan) отримав 200; після вікна alice знову 200 |
+
+Quota і partition лімітера не є authorization: 429 не відкриває чужий ресурс, а дозволений запит не стає permitted через наявність quota (повторно перевіряють тести ЛР 4).
+
+**CORS і antiforgery (спостереження).** Політика Lab05BrowserProbe діє лише у Development і дозволяє credentials з origin http://localhost:4173, тож цей origin міг би прочитати відповідь маршруту токена. Це навчальна політика probe-стенда, у Production CORS не реєструється; allowlist із credentials не повинен охоплювати origin, якому не довіряють.
+
 ## 9. Dependency and secret audit
 **Пошук у tracked-файлах (Git):** `git grep -n -I -i -E 'password|passwd|secret|api.?key' -- .`; кількість збігів: 137. Пошук лише у tracked-файлах поточного стану; не доводить відсутність секретів в untracked-файлах, зовнішніх clone/CI чи в історії Git. Реальних credentials не знайдено; кожен збіг класифіковано нижче (за файлами, з номерами рядків).
 
@@ -93,6 +116,18 @@ DISCREPANCY для SC-05..SC-07: маршрут є в коді й OpenAPI, ал�
 | src/SecureLab.Api/appsettings.Development.json | connection string Development із local-study-password | accepted, study-only | читається лише в Development; у Production джерело ConnectionStrings__SecureLab поза Git |
 | src/SecureLab.Api/appsettings.json | рівні журналювання (Default: Information), AllowedHosts: "*" | не секрет; AllowedHosts записано як залишковий ризик | credentials немає; фільтрацію Host вимкнено, прийнятно лише для локального стенда |
 | .env, appsettings.Local.json | не tracked: правила .gitignore:15 і .gitignore:18 | контроль | локальні файли поза Git (перевірено git check-ignore -v) |
+
+### Аудит залежностей
+
+SDK 10.0.401, дата ДАТА. Команди: `dotnet restore` restore exit: 0 та `dotnet package list --vulnerable --include-transitive` The given project `SecureLab.Api` has no vulnerable packages given the current sources.
+The given project `SecureLab.Api.Tests` has no vulnerable packages given the current sources, з кореня solution. Результат: для проєктів SecureLab.Api та SecureLab.Api.Tests джерело api.nuget.org не повідомило про відомі advisories для версій із packages.lock.json (прямі й транзитивні пакети). Межа висновку: лише відомі на цю дату advisories цього джерела; досяжність коду й невідомі вразливості не оцінювалися.
+
+| Package | Version | Direct / transitive | Advisory / severity | Чи використовується relevant functionality | Доступне оновлення | Рішення і причина |
+|---|---|---|---|---|---|---|
+| (немає записів) | | | не виявлено | | | жодних дій; повторити перед релізом |
+
+
+**Межі пошуку секретів:** перевірено всі поточні tracked files 98 на дату ДАТА; історія Git 45, stash, інші клони, віддалені копії та зовнішній CI не перевірялися. Реальних credentials не знайдено; рішення для кожного збігу наведено вище. Якби реальний credential знайшовся, він не вносився б у finding card: поширення значення припиняється, повідомляється викладач і розглядається rotation.
 
 ## 10. Residual risks
 Неперевірені й тимчасово прийняті ризики, відповідальний і наступна дія.
