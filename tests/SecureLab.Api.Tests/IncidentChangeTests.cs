@@ -172,6 +172,7 @@ public sealed class IncidentChangeTests(SecureLabApiFactory factory)
         using var login = await alice.PostAsJsonAsync(
             "/api/auth/login", new { userName = "alice", password = StudyPassword });
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        await alice.UseAntiforgeryTokenAsync();
         var id = await CreateIncidentAsync(alice);
 
         using var denied = await alice.PostAsync($"/api/incidents/{id}/triage", content: null);

@@ -131,7 +131,7 @@ public static class Lab03Identity
             await signIn.SignOutAsync();
             AuthenticationEvents.Write(httpContext, "logout", "success", userRef);
             return Results.NoContent();
-        });
+        }).AddEndpointFilter<AntiforgeryFilter>();
 
         // Навмисно хибна навчальна довіра: ЛР 03 замінює заявлений id на verified principal.
         app.MapGet("/api/me", GetCurrentUser).RequireAuthorization();

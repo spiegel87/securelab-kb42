@@ -33,6 +33,23 @@ Review-start commit: 1e032bc14d5c03bbd91e4c3cfed597a4f9250b67 (гілка lab/6-
 | Журнал ExceptionHandlerMiddleware | TraceId збігається із середнім сегментом traceId відповіді: СЕГМЕНТ; паролі й connection string у журналі: 0 збігів |
 | Відновлення | Development, /health 200, login 204, дозволений GET 200 |
 
+
+Периметр змінювальних маршрутів. Джерела зіставлено: git grep серверних Map(Post|Put|Patch|Delete), git grep змінювальних викликів клієнта, OpenAPI /openapi/v1.json; сервер і OpenAPI збігаються (7 операцій). Клієнт викликає лише 3 маршрути; решта лишається browser-accessible через HTTP (.http, curl): CSRF оцінює HTTP-маршрут, а не видимість кнопки.
+
+| ID | Method + route | Джерело / розбіжність | Яка зміна стану | Cookie authentication | Browser-accessible | Antiforgery validation | Regression ID |
+|---|---|---|---|---|---|---|---|
+| SC-01 | POST /api/auth/register | Lab03Identity.cs; OpenAPI; клієнт auth-lab.js | створення облікового запису | ні | так | absent: публічний маршрут не довіряє cookie; ризик account-creation прийнято, окреме рішення в розділі 10 | ручна перевірка UI (register 201) |
+| SC-02 | POST /api/auth/login | Lab03Identity.cs; OpenAPI; клієнт auth-lab.js | створення сеансу | ні | так | absent: токен до входу не видається; ризик login-CSRF прийнято, лімітер входу діє | LoginProtectionTests (ЛР 3) |
+| SC-03 | POST /api/auth/logout | Lab03Identity.cs; OpenAPI; клієнт auth-lab.js | завершення сеансу | так | так | explicit: AntiforgeryFilter, перевірка до SignOutAsync (для автентифікованих; анонімний logout ідемпотентний) | REG-CSRF-02; Logout_WithoutSession_StaysIdempotent_204 |
+| SC-04 | POST /api/incidents | Lab02Endpoints.cs; OpenAPI; клієнт browser-lab.js, auth-lab.js | створення інциденту | так | так | explicit: AntiforgeryFilter | REG-CSRF-02 |
+| SC-05 | PUT /api/incidents/{id} | IncidentEndpoints.cs; OpenAPI; DISCREPANCY: виклику в клієнті немає | зміна title і description | так | так | explicit: AntiforgeryFilter | REG-CSRF-01; REG-CSRF-02 |
+| SC-06 | DELETE /api/incidents/{id} | IncidentEndpoints.cs; OpenAPI; DISCREPANCY: виклику в клієнті немає | видалення інциденту | так | так | explicit: AntiforgeryFilter | REG-CSRF-02 |
+| SC-07 | POST /api/incidents/{id}/triage | IncidentEndpoints.cs; OpenAPI; DISCREPANCY: виклику в клієнті немає | перехід статусу New → Triaged | так | так | explicit: AntiforgeryFilter | REG-CSRF-02 |
+
+DISCREPANCY для SC-05..SC-07: маршрут є в коді й OpenAPI, але клієнт його не викликає. Це не розбіжність документації й коду: API використовується також .http-сценаріями, тому маршрути лишаються browser-accessible й входять до периметра. Узгоджено без змін.
+
+Контракт antiforgery (сервер ↔ клієнт): header X-SecureLab-CSRF; маршрут видачі GET /api/auth/csrf-token (RequireAuthorization, відповідь без кешування); antiforgery-cookie securelab-af (Secure Always поза Development); єдине місце валідації AntiforgeryFilter у Security/AntiforgeryProtection.cs (відмова: 400 Problem Details); клієнт: csrf-helper.js (токен одержується ліниво на кожній сторінці, лише в пам'яті, скидається після login, logout, 400/401 і pageshow). Токен не копіюється в storage; значення токена в докази не потрапляють.
+
 ## 9. Dependency and secret audit
 **Пошук у tracked-файлах (Git):** `git grep -n -I -i -E 'password|passwd|secret|api.?key' -- .`; кількість збігів: 137. Пошук лише у tracked-файлах поточного стану; не доводить відсутність секретів в untracked-файлах, зовнішніх clone/CI чи в історії Git. Реальних credentials не знайдено; кожен збіг класифіковано нижче (за файлами, з номерами рядків).
 

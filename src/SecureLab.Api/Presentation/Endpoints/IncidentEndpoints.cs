@@ -24,6 +24,7 @@ public static class IncidentEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPut("/{id:guid}", UpdateAsync)
+            .AddEndpointFilter<AntiforgeryFilter>()
             .WithName("UpdateIncident")
             .Produces<IncidentListItemResponse>()
             .ProducesValidationProblem()
@@ -31,11 +32,13 @@ public static class IncidentEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapDelete("/{id:guid}", DeleteAsync)
+            .AddEndpointFilter<AntiforgeryFilter>()        
             .WithName("DeleteIncident")
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/{id:guid}/triage", TriageAsync)
+            .AddEndpointFilter<AntiforgeryFilter>()
             .WithName("TriageIncident")
             .Produces<IncidentListItemResponse>()
             .ProducesProblem(StatusCodes.Status403Forbidden)
