@@ -22,6 +22,14 @@ function postJson(path, payload) {
   });
 }
 
+function postJsonProtected(path, payload) {
+  return SecureLabCsrf.mutate(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 async function readJson(response) {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("json")) {
@@ -135,6 +143,7 @@ loginForm.addEventListener("submit", event => {
     const response = await postJson("/api/auth/login", Object.fromEntries(new FormData(form)));
     form.elements.password.value = "";
     if (response.status === 204) {
+      SecureLabCsrf.reset();
       showOutput("Вхід виконано.");
       await refreshSession();
     } else if (response.status === 401) {
@@ -163,7 +172,7 @@ incidentForm.addEventListener("submit", event => {
       return;
     }
     // У запиті лише поля request DTO: власника, статус і id визначає сервер.
-    const response = await postJson("/api/incidents", {
+    const response = await postJsonProtected("/api/incidents", {
       title: data.title,
       description: data.description,
       severity: data.severity,
@@ -182,11 +191,12 @@ incidentForm.addEventListener("submit", event => {
 });
 
 document.querySelector("#logout").addEventListener("click", () => guarded(async () => {
-  const response = await apiFetch("/api/auth/logout", { method: "POST" });
+  const response = await SecureLabCsrf.mutate("/api/auth/logout", { method: "POST" });
   if (response.status !== 204) {
     showOutput(`Вихід не виконано (код ${response.status}).`);
     return;
   }
+  SecureLabCsrf.reset();
   showAnonymous();
   incidentForm.reset();
   incidentForm.elements.occurredAtUtc.value = nowLocalValue();
