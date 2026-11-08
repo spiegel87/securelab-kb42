@@ -42,6 +42,14 @@ if (builder.Environment.IsDevelopment())
     });
 }
 
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = AntiforgeryContract.HeaderName;
+    options.Cookie.Name = "securelab-af";
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+});
+
 var app = builder.Build();
 
 var resetRequested = args.Contains("--reset-database", StringComparer.Ordinal);

@@ -3,6 +3,7 @@ using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Application.Incidents;
 using System.Security.Claims;
+using SecureLab.Api.Security;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -88,7 +89,7 @@ public static class Lab02Endpoints
                 CreateIncidentResult.Created created => Results.Created($"/api/incidents/{created.Response.Id}", created.Response),
                 _ => throw new InvalidOperationException("Unknown CreateIncidentResult case")
             };
-        }).RequireAuthorization();
+        }).RequireAuthorization().AddEndpointFilter<AntiforgeryFilter>();
     }
 }
 
