@@ -14,8 +14,27 @@ Review-start commit: 1e032bc14d5c03bbd91e4c3cfed597a4f9250b67 (гілка lab/6-
 Таблиця: ID / актив / вплив / ймовірність / пріоритет / статус / ID повторної перевірки.
 ## 6. Detailed findings
 Щонайменше одна власна знахідка для достатнього рівня, дві виправлені — для доброго; три виправлені — для відмінного, з них третя поза прямим checklist; кожна в окремому файлі docs/findings/*.md.
+
 ## 7. Regression results
-Для всіх: мінімальний pack SQLi/authentication/authorization-IDOR/XSS/CSRF. Добрий/відмінний: ще validation/CORS/rate limiting. Відмінний: автоматизований повний REG-CSRF-01 (login/cookie → відмова → незмінний стан → token → успіх → змінений стан), команда й фактичний результат. Початкові ID сценаріїв (T/S/A/E/R/REG), команда або тест, передумова, точний результат, перевірка стану ресурсу, перевірений фінальний commit.
+
+Pack доброго рівня: усі рядки. Автоматизовані сценарії запускаються командою `dotnet test tests/SecureLab.Api.Tests -c Release --filter ...` (або весь набір), ручні процедури описано в docs/browser-security-evidence.md і в розділі 8. Старі ідентифікатори ЛР 2–4 лишаються під своїми іменами; нові REG-* ID введено лише для сценаріїв ЛР 6.
+
+| Рівень | ID у проєкті | Property | Негативний сценарій | Позитивна перевірка | Evidence / command | Result |
+|---|---|---|---|---|---|---|
+| добрий | T-02 (ЛР 2) | server validation | login + чинний токен, POST /api/incidents з severity "7" → 400, errors.severity, ресурс не створено | допустиме input зберігається | `--filter "FullyQualifiedName~CreateIncident_NumericSeverityString\|FullyQualifiedName~CreateIncident_ValidRequest"` | pending |
+| достатній | S-02, T-04 (ЛР 2) | query не змінює структуру SQL | Search_WithSqliControlPayload_DoesNotExpandResultSet | Search_WithLegitimateApostrophe_ReturnsExpectedRecordWithoutError; Search_ReturnsJson; Search_WithPercentCharacter_IsTreatedAsLiteralNotWildcard | `--filter "FullyQualifiedName~Search_With\|FullyQualifiedName~Search_ReturnsJson"` | pending |
+| достатній | A-* (ЛР 3): A01, A06, A07 | identity lifecycle | A01_Anonymous_Me_Returns401_NotRedirect_NotBearerChallenge; A07_UnknownUser_And_WrongPassword_GiveSameExternalResult; A06_Logout_ThenSameClient_Me_Returns401 | A02_Login_ThenMe_ReturnsCurrentUser_WithSafeFieldsOnly; Login_UsesPasswordExactly_ExactSucceeds_TrimmedFails | `--filter "FullyQualifiedName~AuthenticationSecurityTests"` | pending |
+| достатній | A-03, A-04, A-06 (ЛР 4) | server-side ownership / role check | A03_Reporter_ReadsForeignIncident_Returns404_AndNoForeignData; A04_Reporter_UpdateAndDeleteForeignIncident_Return404_AndChangeNothing; A06_Reporter_Triage_OwnIncident_Returns403_ForeignReturns404_StatusUnchanged | A02_Owner_ReadsOwnIncident_Returns200; A07_Analyst_Triage_NewIncident_Returns200_RecordsHistory_ThenNonNewIsForbidden; Owner_UpdatesAndDeletesOwnNewIncident | `--filter "FullyQualifiedName~IncidentAccessTests\|FullyQualifiedName~IncidentChangeTests"` | pending |
+| достатній | REG-XSS-01 (ЛР 5) | text не виконується як code | marker: на vulnerable commit 5a5ecb0 виконувався, на fixed поточному стані data-lab05-marker лишається null | звичайний складний текст (лапки, < і >, Unicode, теги b) показується буквально | ручна процедура REG-XSS-01 (docs/browser-security-evidence.md) + автоматично ClientScript_DoesNotUseDangerousInnerHtmlSink, AuthLabScript_DoesNotUseForbiddenSinksOrBrowserStorage | pending |
+| добрий | REG-CORS-01 (ЛР 5) | exact browser origin | simple GET з origin 4174 не читається, preflight без Allow-* | allowed origin 4173: 200 і Access-Control-Allow-Origin | ручна процедура з двома probe-origins і curl (розділ 8) | pending |
+| достатній | REG-CSRF-01, REG-CSRF-02 (ЛР 6) | token pair required | PUT без / з недійсним токеном → 400, стан не змінено; усі мутації периметра без токена → 400 | валідна пара: очікувана зміна стану; logout без сеансу лишається 204 | `--filter "FullyQualifiedName~CsrfRegressionTests"` | pending |
+| добрий | ЗНАЧЕННЯ_ID (ЛР 3) | abuse flow limited (вхід) | Login_AfterLimit_Returns429_ThenRecovers_AndNewHostIsIndependent: перевищення quota → 429 | відновлення після вікна, новий host незалежний | `--filter "FullyQualifiedName~Login_AfterLimit"` | pending |
+| добрий | REG-RATE-01 (ЛР 6) | search обмежено для кожного principal окремо | Search_ExhaustedQuota_Returns429_OtherPrincipalUnaffected: 31-й запит → 429, інший користувач 200 | запити в межах quota (30) → 200; відновлення після вікна: ручна перевірка (alice-after-window 200) | `--filter "FullyQualifiedName~SearchRateLimitTests"` + ручна перевірка | pending |
+| достатній | REG-HDR-01 (ЛР 6, F-01) | захисні заголовки по одному, у т.ч. на помилці 500 | Baseline_Headers_ArePresent_ExactlyOnce; контрольована 500 (Production, зламана БД) | заголовки на 200 / 400 / 404 | `--filter "FullyQualifiedName~SecurityHeadersTests"` + ручна відповідь 500 | pending |
+| достатній | REG-COOKIE-01 (ЛР 6) | cookie мають HttpOnly, SameSite, Secure у Production | Production_Cookies_AreHttpOnly_Secure_WithSameSite | у Development без Secure на HTTP: Login_OverPlainHttp_Development_Cookie_HasNoSecureAttribute | `--filter "FullyQualifiedName~Cookie"` | pending |
+| добрий | REG-LOG-01 (ЛР 6, F-02) | подія входу має utc і trace відповіді | FailedLogin_Event_HasUtcTime_AndSameTraceIdAsProblemDetails | AuthenticationEvents_AreLogged_WithoutCredentials | `--filter "FullyQualifiedName~AuthEventTraceTests\|FullyQualifiedName~AuthenticationEvents_AreLogged"` | pending |
+
+
 ## 8. Hardening controls
 
 ### Production-like профіль (no-launch-profile) і безпечна помилка
@@ -72,6 +91,21 @@ TestServer не доводить сертифікат і реальне шифр
 Quota і partition лімітера не є authorization: 429 не відкриває чужий ресурс, а дозволений запит не стає permitted через наявність quota (повторно перевіряють тести ЛР 4).
 
 **CORS і antiforgery (спостереження).** Політика Lab05BrowserProbe діє лише у Development і дозволяє credentials з origin http://localhost:4173, тож цей origin міг би прочитати відповідь маршруту токена. Це навчальна політика probe-стенда, у Production CORS не реєструється; allowlist із credentials не повинен охоплювати origin, якому не довіряють.
+
+### Журнали й audit trail
+
+Діагностичний журнал допомагає оператору дослідити збій; audit-подія фіксує суб'єкта, дію, ресурс, результат і час. Джерело доказу: консольний журнал із Logging__Console__IncludeScopes=true, записаний у файл поза Git (локальні штучні дані). Висновок стосується лише цих сценаріїв і цього sink.
+
+| Сценарій | Sink / фрагмент | Спостережені поля | Чого немає (перевірено) | Результат |
+|---|---|---|---|---|
+| Успішний вхід | AuthEvent login, Security/AuthenticationEvents.cs | result success, user id, source, utc, trace | пароль, cookie, token, введене ім'я | пройдено (після F-02) |
+| Невдалий вхід | AuthEvent login | result failure, user unidentified, source, utc, trace; відповідь 401 однакова для відомого й невідомого імені | введене ім'я, пароль, причина (акаунт існує чи ні) | пройдено |
+| Відмова привілейованої дії | AuthzEvent authorization.denied | action incident.triage, actor, role Reporter, resource, result denied, utc, trace; статус ресурсу не змінився (New → New) | тіло запиту, cookie, email | пройдено |
+| Помилка валідації | відповідь 400 Validation Problem Details | errors за полем; у журналі немає запису з тілом запиту | повне тіло запиту | пройдено |
+| Неочікувана помилка (Production, зламана БД) | відповідь 500 з traceId; запис ExceptionHandlerMiddleware | traceId відповіді дорівнює середньому сегменту TraceId у журналі | stack trace, SQL, шляхи, connection string у відповіді; секрети в журналі | пройдено |
+| Привілейований перехід Incident.Status | таблиця 46 (історія статусів) | перехід New → Triaged, користувач Morgan (Analyst), час; відмова Reporter не створює запис | credential, зайвий dump моделі | пройдено |
+
+Перевірка відсутності чутливого вмісту в журналі (grep -c): пароль із SeedUsers__Password: 0; вигадані паролі WrongPassword1! та NotARealPassword1!: 0; cookie-заголовки: 0; antiforgery-заголовок X-SecureLab-CSRF: 0; параметри EF Core зі справжніми значеннями: ЗНАЧЕННЯ. Log injection: усі виклики журналу використовують шаблони з параметрами, інтерполяції у викликах немає (перевірено пошуком). Мінімізація даних: поле source містить IP-адресу; для локального стенда прийнятно, у реальному середовищі потрібна політика збереження.
 
 ## 9. Dependency and secret audit
 **Пошук у tracked-файлах (Git):** `git grep -n -I -i -E 'password|passwd|secret|api.?key' -- .`; кількість збігів: 137. Пошук лише у tracked-файлах поточного стану; не доводить відсутність секретів в untracked-файлах, зовнішніх clone/CI чи в історії Git. Реальних credentials не знайдено; кожен збіг класифіковано нижче (за файлами, з номерами рядків).
