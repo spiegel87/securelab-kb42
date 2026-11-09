@@ -10,8 +10,10 @@ public static class AuthenticationEvents
     {
         var logger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(Category);
         var source = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // Той самий trace, що Problem Details віддає у відповіді (traceId), як у AuthorizationEvents.
+        var traceId = System.Diagnostics.Activity.Current?.Id ?? httpContext.TraceIdentifier;
         logger.LogInformation(
-            "AuthEvent {EventType}: result {Result}, user {UserRef}, source {Source}, trace {TraceId}",
-            eventType, result, userRef, source, httpContext.TraceIdentifier);
+            "AuthEvent {EventType}: result {Result}, user {UserRef}, source {Source}, utc {Utc}, trace {TraceId}",
+            eventType, result, userRef, source, DateTimeOffset.UtcNow.ToString("O"), traceId);
     }
 }

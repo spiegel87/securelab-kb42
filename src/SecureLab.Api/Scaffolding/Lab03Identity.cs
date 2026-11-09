@@ -3,6 +3,7 @@ using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using System.Security.Claims;
 using SecureLab.Api.Security;
+using Microsoft.AspNetCore.Antiforgery;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -130,10 +131,16 @@ public static class Lab03Identity
             await signIn.SignOutAsync();
             AuthenticationEvents.Write(httpContext, "logout", "success", userRef);
             return Results.NoContent();
-        });
+        }).AddEndpointFilter<AntiforgeryFilter>();
 
         // Навмисно хибна навчальна довіра: ЛР 03 замінює заявлений id на verified principal.
         app.MapGet("/api/me", GetCurrentUser).RequireAuthorization();
+        // Видача request token: antiforgery-cookie йде в Set-Cookie, сам токен у тілі.
+        app.MapGet(AntiforgeryContract.TokenRoute, (IAntiforgery antiforgery, HttpContext httpContext) =>
+        {
+            var tokens = antiforgery.GetAndStoreTokens(httpContext);
+            return Results.Ok(new { token = tokens.RequestToken });
+        }).RequireAuthorization();
         
         // Приклад лише mechanics: не повертає identity і не реалізує оцінювану operation.
         app.MapGet("/api/auth/session-check", () => Results.NoContent()).RequireAuthorization();
