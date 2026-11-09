@@ -136,3 +136,14 @@ docs/                    карта архітектури, варіант, ма
 
 Перед commit перегляньте `git status`, `git diff --staged` і переконайтеся, що
 до Git не потрапили `.env`, cookies, tokens, реальні passwords, dumps або logs.
+
+
+## ЛР 6: запуск і перевірка
+
+Передумови: стабільна SDK 10.0.*, Docker (PostgreSQL), змінні середовища `SeedUsers__Password` та, за потреби, `ConnectionStrings__SecureLab`, задані поза Git.
+
+- Тести: `dotnet test tests/SecureLab.Api.Tests -c Release`
+- Запуск без очищення даних: `dotnet run --project src/SecureLab.Api`
+- Очищення й заповнення навчальних даних лише у Development: `dotnet run --project src/SecureLab.Api -- --reset-database`
+
+Змінювальні запити (POST, PUT, DELETE) з автентифікаційною cookie потребують заголовка `X-SecureLab-CSRF`: токен видає `GET /api/auth/csrf-token` після входу. Ручні запити з `tests/http` без цього заголовка отримують 400.

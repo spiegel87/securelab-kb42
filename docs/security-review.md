@@ -4,14 +4,25 @@
 
 ## 1. Executive summary
 Один абзац: що перевірено, скільки знахідок зафіксовано й виправлено, результат фактичного фінального прогону, головні залишкові ризики.
+
 ## 2. Scope та exclusions
 У межах: поточні відстежувані Git-файли (код, конфігурація, скрипти, docs), клієнт, API, локальна PostgreSQL у Docker Compose, console-журнали; baseline 2-A. Історія Git: не перевірено, якщо нижче не вказано окремо фактичні файли чи refs. Виключено: зовнішній penetration test, production host, реальний TLS/HSTS, Redis, соціальна інженерія, DoS у промисловому масштабі. Усе перевірялось лише на локальному навчальному стенді зі штучними даними.
+
 ## 3. System overview і trust boundaries
-Для всіх: див. threat-model.md. Добрий/відмінний: кожна межа → конкретний test; відмінний: asset → threat → control → verification.
+Схему та перелік меж дивіться в docs/threat-model.md. Зв'язок кожної межі з перевіркою: browser→API: REG-CSRF-01 і REG-CSRF-02 (токен), REG-XSS-01 (текст не виконується), REG-CORS-01; API→PostgreSQL: S-02 і Search_WithSqliControlPayload_DoesNotExpandResultSet (структура SQL не змінюється); repository→build: git grep секретів і аудит залежностей (розділ 9); environment→configuration: Production-тести (Host_IsReallyProduction, Production_Cookies_AreHttpOnly_Secure_WithSameSite) і відмова --reset-database у Production (розділ 8).
+
 ## 4. Methodology та test environment
 Review-start commit: 1e032bc14d5c03bbd91e4c3cfed597a4f9250b67 (гілка lab/6-hardening-review від main; v0.5.0 не переміщено). Локальна БД: PostgreSQL 127.0.0.1:54329 (Docker Compose), стан відновлено командою reset/seed у Development. Профілі: Development (dotnet run, launch profile http) і Production-like (--no-launch-profile -c Release). Клієнти: браузер (cookie-сеанс) і .http / curl. Кожна перевірка в розділах нижче вказує команду, код завершення й профіль.
+
 ## 5. Findings summary
-Таблиця: ID / актив / вплив / ймовірність / пріоритет / статус / ID повторної перевірки.
+
+| ID | Актив | Вплив | Ймовірність | Пріоритет | Статус | ID повторної перевірки |
+|---|---|---|---|---|---|---|
+| F-01 | HTTP-відповіді API (захисні заголовки) | малий: відповіді 500 були без nosniff, Referrer-Policy і CSP; Referrer-Policy дублювався | потрібен збій, що потрапляє в exception handler; на інших відповідях дубль був завжди | P3 | Fixed | REG-HDR-01 |
+| F-02 | журнал подій автентифікації | малий: оператор не знаходить запис за traceId відповіді 401, подія без UTC-часу | будь-який вхід | P3 | Fixed | REG-LOG-01 |
+
+Порядок дій. Обидві знахідки мають малий вплив на конфіденційність і цілісність, тому пріоритет P3. F-01 оброблено першою: заголовки стосуються кожного класу відповідей, а доказ і виправлення вимагали лише зміни конвеєра. F-02 друга: це операційна проблема розслідування, її ймовірність висока (кожен вхід), але вплив обмежений. Тимчасово прийнятих ризиків у знахідках немає; прийняті обмеження перелічено в розділі 10.
+
 ## 6. Detailed findings
 Щонайменше одна власна знахідка для достатнього рівня, дві виправлені — для доброго; три виправлені — для відмінного, з них третя поза прямим checklist; кожна в окремому файлі docs/findings/*.md.
 
@@ -69,7 +80,6 @@ DISCREPANCY для SC-05..SC-07: маршрут є в коді й OpenAPI, ал�
 
 Контракт antiforgery (сервер ↔ клієнт): header X-SecureLab-CSRF; маршрут видачі GET /api/auth/csrf-token (RequireAuthorization, відповідь без кешування); antiforgery-cookie securelab-af (Secure Always поза Development); єдине місце валідації AntiforgeryFilter у Security/AntiforgeryProtection.cs (відмова: 400 Problem Details); клієнт: csrf-helper.js (токен одержується ліниво на кожній сторінці, лише в пам'яті, скидається після login, logout, 400/401 і pageshow). Токен не копіюється в storage; значення токена в докази не потрапляють.
 
-
 ### Транспорт, cookie-профіль і обмеження частоти запитів
 
 **Транспорт (конфігурація).** У launchSettings.json єдиний профіль http (http://localhost:5080); у Program.cs немає UseHttpsRedirection() та UseHsts(). Отже сам baseline не надає доказу HTTPS/HSTS. Local HTTP profile не доводить production transport safety: реальний TLS, HTTP→HTTPS redirect (за замовчуванням 307) і HSTS response на production host не тестувалися. Відсутність Strict-Transport-Security на loopback не класифікується як дефект: за замовчуванням UseHsts не додає його для loopback-хостів. HTTPS, redirect і HSTS виконують різні ролі.
@@ -106,6 +116,20 @@ Quota і partition лімітера не є authorization: 429 не відкри
 | Привілейований перехід Incident.Status | таблиця 46 (історія статусів) | перехід New → Triaged, користувач Morgan (Analyst), час; відмова Reporter не створює запис | credential, зайвий dump моделі | пройдено |
 
 Перевірка відсутності чутливого вмісту в журналі (grep -c): пароль із SeedUsers__Password: 0; вигадані паролі WrongPassword1! та NotARealPassword1!: 0; cookie-заголовки: 0; antiforgery-заголовок X-SecureLab-CSRF: 0; параметри EF Core зі справжніми значеннями: ЗНАЧЕННЯ. Log injection: усі виклики журналу використовують шаблони з параметрами, інтерполяції у викликах немає (перевірено пошуком). Мінімізація даних: поле source містить IP-адресу; для локального стенда прийнятно, у реальному середовищі потрібна політика збереження.
+
+
+### Hardening controls: control, ризик, перевірка, межа
+
+| Control | Ризик | Перевірка | Межа |
+|---|---|---|---|
+| Antiforgery на всій cookie-мутаційній поверхні (SC-03..SC-07), token route, helper клієнта | CSRF: стороння сторінка надсилає запит з автоматичною cookie користувача | REG-CSRF-01, REG-CSRF-02, ручна перевірка UI | login/register публічні й токеном не захищені (розділ 10) |
+| Захисні заголовки, один middleware перед exception handler (OnStarting) | MIME sniffing, витік Referer, embedding; відсутність заголовків на помилці | REG-HDR-01, контрольована 500 | відповіді поза конвеєром (протокольні відмови Kestrel) не охоплено |
+| CORS: точний allowlist, лише Development | cross-origin читання відповіді | REG-CORS-01 (4173/4174, curl) | CORS не є authorization і не замінює CSRF |
+| Rate limiting входу та пошуку (partition за користувачем/IP) | перебір паролів, зловживання пошуком | Login_AfterLimit_…, Search_ExhaustedQuota_…, ручні перевірки з відновленням | лічильники в пам'яті одного процесу, IP може бути спільним |
+| Cookie: HttpOnly, SameSite, Secure у Production | перехоплення/витік cookie | Production_Cookies_AreHttpOnly_Secure_WithSameSite | TestServer не доводить сертифікат і реальний TLS |
+| Безпечна 500 з traceId | розкриття стека, SQL, шляхів | відповідь і запис ExceptionHandlerMiddleware, traceId збігається | лише сценарій недосяжної БД |
+
+Змістові відмінності Development і Production: у Development OpenAPI /openapi/v1.json доступний (200), у Production 404 Problem Details; політика CORS Lab05BrowserProbe діє лише у Development, у Production Access-Control-Allow-Origin для 4173 немає; --reset-database у Production відхиляється InvalidOperationException; auth-cookie й antiforgery-cookie мають Secure лише поза Development (SameAsRequest). Шлях /scalar/v1 у Production віддає 200 text/html через fallback клієнта (Scalar не доступний).
 
 ## 9. Dependency and secret audit
 **Пошук у tracked-файлах (Git):** `git grep -n -I -i -E 'password|passwd|secret|api.?key' -- .`; кількість збігів: 137. Пошук лише у tracked-файлах поточного стану; не доводить відсутність секретів в untracked-файлах, зовнішніх clone/CI чи в історії Git. Реальних credentials не знайдено; кожен збіг класифіковано нижче (за файлами, з номерами рядків).
@@ -164,9 +188,24 @@ The given project `SecureLab.Api.Tests` has no vulnerable packages given the cur
 **Межі пошуку секретів:** перевірено всі поточні tracked files 98 на дату ДАТА; історія Git 45, stash, інші клони, віддалені копії та зовнішній CI не перевірялися. Реальних credentials не знайдено; рішення для кожного збігу наведено вище. Якби реальний credential знайшовся, він не вносився б у finding card: поширення значення припиняється, повідомляється викладач і розглядається rotation.
 
 ## 10. Residual risks
-Неперевірені й тимчасово прийняті ризики, відповідальний і наступна дія.
+
+| Ризик | Статус | Відповідальний | Наступна дія |
+|---|---|---|---|
+| AllowedHosts: "*" (фільтрацію Host вимкнено) | прийнято для локального стенда | автор (студент) | у реальному deployment обмежити перелік хостів |
+| login і register без antiforgery-токена (login-CSRF, створення облікових записів) | прийнято; діє limiter входу | автор (студент) | розглянути токен до входу або іншу перевірку при подальшому розвитку |
+| Lab05BrowserProbe дозволяє credentials з origin 4173, тож цей origin міг би прочитати відповідь маршруту токена | лише Development, у Production не реєструється | автор (студент) | прибрати політику перед будь-яким deployment |
+| Локальний HTTP-профіль: TLS, HTTP→HTTPS redirect і HSTS не тестувалися | не перевірено | автор (студент) | перевірити на production host із сертифікатом |
+| IP-адреса в audit-подіях автентифікації | прийнято для навчального стенда | автор (студент) | політика збереження й мінімізації журналів |
+| Пошук (Lab02Endpoints) повертає Description; клієнт його не рендерить | залишковий | автор (студент) | будь-який майбутній клієнт має виводити через textContent |
+| Відкриті навчальні credentials у tracked-файлах (local-study-password) | accepted, study-only | автор (студент) | не використовувати для інших БД; при реальному credential, rotation |
+| Аудит залежностей актуальний на дату запуску | прийнято | автор (студент) | повторити перед релізом |
+| Історія Git, stash, інші клони не скануються | не перевірено | автор (студент) | розширити межі пошуку секретів за потреби |
+| Лічильники rate limiting у пам'яті процесу; ключі antiforgery ефемерні | прийнято (один процес) | автор (студент) | для кількох екземплярів: спільний store та спільні ключі Data Protection |
+
 ## 11. Conclusion
-Лише фактичні результати.
+
+Executive summary. Перевірено поточні відстежувані файли власного SecureLab v0.5.0 (baseline 2-A) на локальному стенді зі штучними даними. Зафіксовано й виправлено дві знахідки (F-01, F-02; обидві P3), додано antiforgery-перевірку на всій cookie-мутаційній поверхні (REG-CSRF-01, REG-CSRF-02), обмеження частоти пошуку на двох partitions, перевірено профілі Development і Production, залежності, секрети та журнали. Результат прогону на гілці перед злиттям: ЗНАЧЕННЯ_ТЕСТІВ з ЗНАЧЕННЯ_ТЕСТІВ автоматизованих тестів пройдено, ручні сценарії REG-XSS-01, REG-CORS-01, 500 і лімітерів виконано ДАТА. Хеш прийнятого merge commit і результат фінального прогону на ньому додає експорт PDF. Головні залишкові ризики: login/register без токена, AllowedHosts "*", локальний HTTP без перевірки TLS і HSTS.
+
 ## 12. Evidence appendix
 Для відмінного: доказ відсутності чутливих даних у логах шести сценаріїв етапу 3, п. 4; обґрунтування пріоритетів findings; відтворювані передумови й retest для іншої людини.
 Шляхи, точні команди, ID сценаріїв, безпечний зв’язок відповіді з записом журналу через traceId; без паролів, cookie, токенів і connection strings.
@@ -176,3 +215,6 @@ The given project `SecureLab.Api.Tests` has no vulnerable packages given the cur
 | Дата | Сервіс | Завдання/фрагмент | Авторська адаптація | Перевірка й результат |
 |---|---|---|---|---|
 | заповнити або не використовував/ла | | | | |
+
+
+Висновок. Лише фактичні результати: виявлено й виправлено дві знахідки (заголовки безпеки на помилці 500 і час/trace у події автентифікації), реалізовано й перевірено antiforgery на периметрі з семи операцій, rate limiting пошуку з відновленням, підтверджено відсутність паролів, cookie й токенів у журналі за шістьма сценаріями. Не перевірено: реальний TLS і HSTS, історію Git, вплив залежностей за межами відомих advisories на дату запуску.
